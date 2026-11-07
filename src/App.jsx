@@ -1,104 +1,118 @@
 import { useEffect, useRef } from 'react';
+import Phaser from 'phaser';
 
 function App() {
-  const canvasRef = useRef(null);
+  const gameRef = useRef(null);
 
   useEffect(() => {
-    const canvas = canvasRef.current;
-    const ctx = canvas.getContext('2d');
-    
-    // Ajustar tamaño al de la pantalla
-    canvas.width = window.innerWidth;
-    canvas.height = window.innerHeight;
-    
-    const centerX = canvas.width / 2;
-    const centerY = canvas.height / 2;
+    // Configuración del motor del juego
+    const config = {
+      type: Phaser.AUTO,
+      width: window.innerWidth,
+      height: window.innerHeight,
+      backgroundColor: '#1a1a1a',
+      parent: gameRef.current,
+      physics: {
+        default: 'arcade',
+        arcade: { debug: false } // Ponlo en 'true' si quieres ver las cajas de colisión
+      },
+      scene: {
+        preload: preload,
+        create: create,
+        update: update
+      }
+    };
 
-    // Función para dibujar un rombo (suelo isométrico)
-    function drawIsoTile(x, y, size, color) {
-      ctx.beginPath();
-      ctx.moveTo(x, y - size);
-      ctx.lineTo(x + size, y);
-      ctx.lineTo(x, y + size);
-      ctx.lineTo(x - size, y);
-      ctx.closePath();
-      ctx.fillStyle = color;
-      ctx.fill();
-      ctx.strokeStyle = '#333';
-      ctx.stroke();
+    const game = new Phaser.Game(config);
+    let player;
+    let cursors;
+    let infoText;
+    let isInZone = false;
+
+    function preload() {
+      // Generamos una textura cuadrada para el jugador sin usar imágenes externas
+      const graphics = this.make.graphics({ x: 0, y: 0, add: false });
+      graphics.fillStyle(0xff00ff, 1); // Color magenta
+      graphics.fillRect(0, 0, 32, 32);
+      graphics.generateTexture('player', 32, 32);
     }
 
-    // Dibujar el piso completo
-    for (let row = -5; row < 5; row++) {
-      for (let col = -5; col < 5; col++) {
-        // Convertir coordenadas de cuadrícula a isométricas
-        let isoX = (col - row) * 40 + centerX;
-        let isoY = (col + row) * 20 + centerY;
-        drawIsoTile(isoX, isoY, 40, '#1a1a1a');
+    function create() {
+      // 1. Dibujar el Suelo de la Oficina
+      this.add.rectangle(window.innerWidth / 2, window.innerHeight / 2, 800, 600, 0x2a2a2a).setStrokeStyle(4, 0x333333);
+      
+      // 2. Dibujar la "Sala de Desarrollo" (Zona interactiva)
+      const devRoom = this.add.rectangle(window.innerWidth / 2 + 200, window.innerHeight / 2 - 100, 200, 150, 0x00ffcc, 0.2);
+      devRoom.setStrokeStyle(2, 0x00ffcc);
+      this.add.text(window.innerWidth / 2 + 120, window.innerHeight / 2 - 180, 'Sala de Desarrollo', { fontFamily: 'monospace', fontSize: '14px', color: '#00ffcc' });
+
+      // 3. Dibujar Muebles (Escritorios)
+      this.add.rectangle(window.innerWidth / 2 - 150, window.innerHeight / 2, 100, 50, 0x555555);
+      this.add.text(window.innerWidth / 2 - 170, window.innerHeight / 2 - 10, 'Recepción', { fontFamily: 'monospace', fontSize: '12px', color: '#fff' });
+
+      // 4. Crear al Jugador
+      player = this.physics.add.sprite(window.innerWidth / 2 - 100, window.innerHeight / 2 + 100, 'player');
+      player.setCollideWorldBounds(true);
+
+      // 5. Controles
+      cursors = this.input.keyboard.createCursorKeys();
+
+      // 6. Texto de UI
+      infoText = this.add.text(20, 20, 'Usa las flechas para moverte', { fontFamily: 'monospace', fontSize: '16px', color: '#ffffff' });
+
+      // 7. Detectar si el jugador entra en la zona
+      this.physics.add.overlap(player, devRoom, () => {
+        if (!isInZone) {
+          isInZone = true;
+          infoText.setText('¡Estás en la Sala de Desarrollo! Iniciando debate...');
+          infoText.setColor('#00ffcc');
+          
+          // Aquí luego conectaremos la IA. Por ahora simulamos un retraso.
+          setTimeout(() => {
+             if(isInZone) infoText.setText('Los 3 doctores están debatiendo tu código...');
+          }, 2000);
+        }
+      }, null, this);
+    }
+
+    function update() {
+      // Velocidad del jugador
+      const speed = 200;
+      player.setVelocity(0);
+
+      if (cursors.left.isDown) {
+        player.setVelocityX(-speed);
+      } else if (cursors.right.isDown) {
+        player.setVelocityX(speed);
+      }
+
+      if (cursors.up.isDown) {
+        player.setVelocityY(-speed);
+      } else if (cursors.down.isDown) {
+        player.setVelocityY(speed);
+      }
+
+      // Si sale de la zona
+      if (isInZone && (player.x < window.innerWidth / 2 + 100 || player.x > window.innerWidth / 2 + 300 || player.y < window.innerHeight / 2 - 175 || player.y > window.innerHeight / 2 - 25)) {
+         isInZone = false;
+         infoText.setText('Usa las flechas para moverte');
+         infoText.setColor('#ffffff');
       }
     }
 
-    // Dibujar una "Sala" (Escritorio del Doctor)
-    const drawDesk = (x, y) => {
-      // Base del escritorio
-      ctx.fillStyle = '#00ffcc';
-      ctx.beginPath();
-      ctx.moveTo(x, y - 15);
-      ctx.lineTo(x + 30, y);
-      ctx.lineTo(x, y + 15);
-      ctx.lineTo(x - 30, y);
-      ctx.closePath();
-      ctx.fill();
-      
-      // Monitor de computadora (Pantalla)
-      ctx.fillStyle = '#ff00ff';
-      ctx.fillRect(x - 5, y - 10, 10, 8);
-      
-      // Persona (Avatar simple)
-      ctx.fillStyle = '#ffffff';
-      ctx.beginPath();
-      ctx.arc(x, y + 5, 5, 0, Math.PI * 2);
-      ctx.fill();
+    // Limpieza cuando el componente se desmonta
+    return () => {
+      game.destroy(true);
     };
-
-    // Dibujar algunas salas
-    drawDesk(centerX - 100, centerY - 50);
-    drawDesk(centerX + 100, centerY + 50);
-    drawDesk(centerX, centerY - 120);
-
-    // Dibujar a Misi (Mascota) caminando
-    const drawMisi = (x, y) => {
-      ctx.fillStyle = '#ffcc00';
-      ctx.beginPath();
-      ctx.arc(x, y, 8, 0, Math.PI * 2);
-      ctx.fill();
-      // Orejitas
-      ctx.beginPath();
-      ctx.moveTo(x - 5, y - 5);
-      ctx.lineTo(x - 2, y - 10);
-      ctx.lineTo(x + 2, y - 5);
-      ctx.fill();
-      ctx.beginPath();
-      ctx.moveTo(x + 5, y - 5);
-      ctx.lineTo(x + 2, y - 10);
-      ctx.lineTo(x - 2, y - 5);
-      ctx.fill();
-    };
-
-    drawMisi(centerX + 50, centerY + 100);
-
   }, []);
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', backgroundColor: '#0a0a0a' }}>
-      <header style={{ padding: '20px', background: '#111', borderBottom: '1px solid #333', display: 'flex', justifyContent: 'space-between', zIndex: 10 }}>
-        <h2 style={{ margin: 0, color: '#00ffcc', fontFamily: 'monospace' }}>BMV Labs - Control Central</h2>
+      <header style={{ padding: '15px', background: '#111', borderBottom: '1px solid #333', display: 'flex', justifyContent: 'space-between', zIndex: 10 }}>
+        <h2 style={{ margin: 0, color: '#00ffcc', fontFamily: 'monospace' }}>BMV Labs - Oficina Virtual</h2>
         <div style={{ color: '#ffcc00', fontFamily: 'monospace' }}>Sistema en línea 🟢</div>
       </header>
-
-      <main style={{ flex: 1, position: 'relative' }}>
-        <canvas ref={canvasRef} style={{ display: 'block', width: '100%', height: '100%' }} />
-      </main>
+      <div ref={gameRef} style={{ flex: 1, overflow: 'hidden' }} />
     </div>
   );
 }
